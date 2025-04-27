@@ -1,0 +1,270 @@
+import React, { useState, useEffect, useRef } from 'react'; // Import các hook cần thiết của React
+import { View, Text, TouchableOpacity, StyleSheet, Switch, Animated } from 'react-native'; // Import các thành phần giao diện từ React Native
+import { Entypo } from '@expo/vector-icons'; // Import biểu tượng từ thư viện Entypo
+import { Audio } from 'expo-av'; // Import thư viện âm thanh từ Expo
+import styles from './Style'; // Import styles từ một file bên ngoài
+
+export default function App() {
+  // Khai báo state để quản lý các giá trị cần thiết trong ứng dụng
+  const [expression, setExpression] = useState('');  // Biểu thức người dùng nhập vào
+  const [result, setResult] = useState('');          // Kết quả tính toán
+  const [isDark, setIsDark] = useState(false);       // Chế độ tối (dark mode)
+  const [cursorIndex, setCursorIndex] = useState(0); // Chỉ số con trỏ để điều khiển vị trí con trỏ
+  const [showThemes, setShowThemes] = useState(false); // Hiển thị lựa chọn chế độ giao diện
+  const [displayEnabled, setDisplayEnabled] = useState(true); // Điều khiển việc hiển thị các tính năng
+
+  // Khởi tạo animation để tạo hiệu ứng nhấp nháy cho con trỏ
+  const blinkAnim = useRef(new Animated.Value(0)).current;
+
+  // Hook useEffect để chạy hiệu ứng nhấp nháy cho con trỏ
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([ 
+        Animated.timing(blinkAnim, { // Tạo hiệu ứng nhấp nháy
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkAnim, { 
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [blinkAnim]); // Lặp lại khi biến blinkAnim thay đổi
+
+  // Danh sách các nút bấm trên giao diện
+  const buttons = [
+    ['Shift', 'Ans', '⬆️', 'ON', 'OFF'],
+    ['Giao diện', '⬅️', '🔵', '➡️', 'Sin'],
+    ['C', 'AC', '⬇️', '+', 'Cos'],
+    ['7', '8', '9', '-', 'Tan'],
+    ['4', '5', '6', '*', 'Cot'],
+    ['1', '2', '3', '/', 'Căn'],
+    ['0', '.', '^', '%', '='],
+  ];
+
+  // Hàm phát âm thanh khi bấm nút
+  const playSound = async (type) => {
+    try {
+      const sound = new Audio.Sound();
+      await sound.loadAsync(
+        type === 'click'
+          ? require('./amthanh/click.wav') // Âm thanh khi bấm nút
+          : require('./amthanh/error.wav') // Âm thanh khi có lỗi
+      );
+      await sound.playAsync(); // Phát âm thanh
+    } catch (error) {
+      console.log('Lỗi âm thanh:', error); // In lỗi nếu có sự cố khi phát âm thanh
+    }
+  };
+
+  // Hàm xử lý khi bấm vào một nút
+  const handlePress = async (value) => {
+    
+    // Kiểm tra nếu trong biểu thức có '/0' (chia cho 0), phát âm thanh lỗi
+    if (expression.includes('/0')) {
+      await playSound('error'); // Phát âm thanh lỗi
+      resetExpression(); // Reset biểu thức
+      return;
+    }
+    // Phát âm thanh click cho các nút khác
+    await playSound('click'); 
+    
+    // Nếu tính năng hiển thị bị tắt, không cho phép bấm nút trừ khi là ON/OFF
+    if (!displayEnabled && value !== 'ON' && value !== 'OFF') {
+      if (['C', 'AC'].includes(value)) { // Xử lý khi bấm C hoặc AC
+        resetExpression();
+      } else if (value === '=') { // Tính toán kết quả khi bấm "="
+        calculateResult();
+      } else { // Thêm giá trị vào biểu thức
+        appendExpression(value);
+      }
+      return;
+    }
+
+    // Các trường hợp xử lý khi tính năng hiển thị được bật
+    if (['C', 'AC'].includes(value)) {
+      resetExpression();
+    } else if (value === '=') {
+      calculateResult();
+    } else {
+      appendExpression(value);
+    }
+  };
+
+  // Hàm đặt lại biểu thức
+  const resetExpression = () => {
+    setExpression(''); // Đặt lại biểu thức
+    setCursorIndex(0); // Đặt lại vị trí con trỏ
+    setShowThemes(false); // Ẩn lựa chọn giao diện
+  };
+
+  // Hàm tính toán kết quả
+  const calculateResult = async () => {
+    try {
+      // Kiểm tra chia cho 0 và lỗi cú pháp
+      if (/4\/0+$/.test(expression)) {
+        await playSound('error'); // Phát âm thanh lỗi
+        setResult('Không hợp lệ');
+      } else {
+        setResult(eval(expression).toString()); // Tính toán kết quả và hiển thị
+      }
+    } catch {
+      setResult('Error'); // Nếu có lỗi trong khi tính toán
+    }
+  };
+
+  // Hàm thêm ký tự vào biểu thức
+  const appendExpression = (value) => {
+    setExpression((prev) => prev + value); // Thêm ký tự mới vào biểu thức
+    setCursorIndex((prev) => prev + 1); // Cập nhật vị trí con trỏ
+  };
+
+  // Hàm di chuyển con trỏ sang trái
+  const moveCursorLeft = () => {
+    setCursorIndex((prev) => (prev > 0 ? prev - 1 : expression.length - 1));
+  };
+  
+  // Hàm di chuyển con trỏ sang phải
+  const moveCursorRight = () => {
+    setCursorIndex((prev) => (prev < expression.length - 1 ? prev + 1 : 0));
+  };
+
+  // Hàm xóa ký tự ở vị trí con trỏ
+  const deleteCharacter = () => {
+    if (expression.length > 0 && cursorIndex > 0) {
+      const updated = expression.slice(0, cursorIndex - 1) + expression.slice(cursorIndex); // Cắt bỏ ký tự
+      setExpression(updated); // Cập nhật lại biểu thức
+      setCursorIndex((prev) => (prev > 0 ? prev - 1 : 0)); // Cập nhật vị trí con trỏ
+    }
+  };
+
+  // Hàm xử lý khi bấm nút Ans (sử dụng kết quả trước đó)
+  const handleAns = () => {
+    if (result !== '') {
+      setExpression(result); // Thêm kết quả vào biểu thức
+      setCursorIndex(result.length); // Cập nhật con trỏ
+    }
+  };
+
+  // Hàm xử lý việc chọn giao diện
+  const handleThemeSelection = () => {
+    if (displayEnabled) {
+      setExpression(expression + '\nSáng | Tối | Xanh | Đơn giản'); // Thêm lựa chọn chế độ vào biểu thức
+      setShowThemes(true); // Hiển thị lựa chọn chế độ giao diện
+    }
+  };
+
+  // Hàm xử lý khi người dùng chọn một chế độ giao diện
+  const handleSelectTheme = (theme) => {
+    setIsDark(theme === 'Tối'); // Thay đổi chế độ tối
+    setExpression(expression.replace('Sáng | Tối | Xanh | Đơn giản', `Chế độ: ${theme}`)); // Cập nhật chế độ
+    setShowThemes(false); // Ẩn lựa chọn chế độ
+  };
+
+  // Hàm xử lý khi bật/tắt chế độ hiển thị
+  const handleOnOff = (value) => {
+    setDisplayEnabled(value === 'ON'); // Bật hoặc tắt tính năng hiển thị
+  };
+
+  return (
+    <View style={[styles.container, isDark && styles.darkContainer]}>
+      {/* Đoạn này chứa các nút chuyển chế độ sáng/tối */}
+      <View style={styles.switchContainer}>
+        <Entypo name="light-up" size={24} color={isDark ? '#ccc' : '#333'} />
+        <Switch value={isDark} onValueChange={() => setIsDark(!isDark)} />
+        <Entypo name="moon" size={24} color={isDark ? '#ccc' : '#333'} />
+      </View>
+
+      {/* Phần hiển thị biểu thức và con trỏ */}
+      <View style={styles.themeContainer}>
+        {showThemes ? (
+          ['Sáng', 'Tối', 'Xanh', 'Đơn giản'].map((option, index) => (
+            <TouchableOpacity key={index} onPress={() => handleSelectTheme(option)}>
+              <Text style={styles.themeOption}>{option}</Text>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <Text style={[styles.expression, isDark && styles.darkExpression, { fontSize: 24, fontWeight: 'bold'}]}>
+            {displayEnabled &&
+              expression.split('\n').map((line, idx) => (
+                <View key={idx} style={styles.themeContainer}>
+                  {line.includes('Sáng | Tối | Xanh | Đơn giản') ? (
+                    line.split(' | ').map((option, i) => (
+                      <TouchableOpacity key={i} onPress={() => handleSelectTheme(option)}>
+                        <Text style={styles.themeOption}>{option}</Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.expression}>{line}</Text>
+                  )}
+                </View>
+              ))}
+            {/* Con trỏ nhấp nháy */}
+            {cursorIndex === expression.length && displayEnabled && (
+              <Animated.Text
+                style={{
+                  color: cursorIndex % 2 === 0 ? 'blue' : 'green', // Đổi màu khi di chuyển con trỏ
+                  opacity: blinkAnim, // Hiệu ứng nhấp nháy
+                  fontSize: 24,
+                  fontWeight: 'bold',
+                }}
+              >
+                |
+              </Animated.Text>
+            )}
+          </Text>
+        )}
+      </View>
+
+      {/* Hiển thị kết quả */}
+      <Text style={[styles.result, isDark && styles.darkText]}>
+        <Text>= </Text>{result}
+      </Text>
+
+      {/* Lưới các nút bấm */}
+      <View style={styles.buttonGrid}>
+        {buttons.map((row, rowIndex) => (
+          <View style={styles.row} key={rowIndex}>
+            {row.map((btn, btnIndex) => {
+              const isDisabled = !displayEnabled && btn !== 'ON';
+              const btnOpacity = isDisabled ? 0.5 : 1;
+
+              const buttonStyle = [
+                styles.button,
+                isDark && styles.darkButton,
+                (btn === 'ON' && displayEnabled) && { borderWidth: 2, borderColor: 'green' },
+                (btn === 'OFF' && !displayEnabled) && { borderWidth: 2, borderColor: 'red' },
+                { opacity: btnOpacity },
+              ];
+
+              const handleButtonPress = () => {
+                if (btn === 'ON' || btn === 'OFF') return handleOnOff(btn);
+                if (isDisabled) return;
+                if (btn === 'Giao diện') return handleThemeSelection();
+                if (btn === 'Ans') return handleAns();
+                if (btn === '➡️') return moveCursorRight();
+                if (btn === '⬅️') return moveCursorLeft();
+                if (btn === 'AC') return deleteCharacter(); // Xóa ký tự khi bấm AC
+                return handlePress(btn);
+              };
+
+              return (
+                <TouchableOpacity
+                  key={btnIndex}
+                  style={buttonStyle}
+                  onPress={handleButtonPress}
+                  disabled={isDisabled}
+                >
+                  <Text style={styles.buttonText}>{btn}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}

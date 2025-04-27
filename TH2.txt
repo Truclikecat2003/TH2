@@ -1,0 +1,3 @@
+- Bước 1: Thêm packpage: 
+- Bước 2: Tạo nút chế độ sáng tối
+Tạo file chedo.js
